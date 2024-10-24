@@ -19,7 +19,7 @@ source_video = "/home/yahya/Downloads/work-desk.mp4"
 cap = cv2.VideoCapture(source_video)
 
 
-# Define working areas (polygons)
+# Define working areas (To draw polygons coords)
 working_area = [
     [(499, 41), (384, 74), (377, 136), (414, 193), (417, 112), (548, 91)],  # Area 0
     [(547, 91), (419, 113), (414, 189), (452, 289), (453, 223), (615, 164)],  # Area 1
