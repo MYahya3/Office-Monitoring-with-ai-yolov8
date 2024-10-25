@@ -4,16 +4,19 @@ import numpy as np
 from ultralytics import YOLO
 from utilis import YOLO_Detection, label_detection, draw_working_areas
 
-# Check if CUDA is available
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(device)
-
-# Load YOLO model and move it to the appropriate device
-model = YOLO("yolov8n.pt")
-model.to(device)
-names = model.names
-model.nms = 0.5
-print(names)
+def setup_device():
+    """Check if CUDA is available and set the device."""
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(f"Using device: {device}")
+    return device
+    
+def load_yolo_model(device):
+    """Load the YOLO model and configure it."""
+    model = YOLO("yolov8n.pt")
+    model.to(device)
+    model.nms = 0.5
+    print(f"Model classes: {model.names}")
+    return model
 
 source_video = "/home/yahya/Downloads/work-desk.mp4"
 cap = cv2.VideoCapture(source_video)
