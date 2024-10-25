@@ -106,6 +106,10 @@ def main(source_video):
     cap = cv2.VideoCapture(source_video)
     frame_cnt = 0
 
+    # Define the codec and create a VideoWriter object
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # Codec for .mp4
+    out = cv2.VideoWriter('output_video/work_desk_output.mp4', fourcc, 30.0, (int(cap.get(3)), int(cap.get(4))))  # Adjust the frame rate and size
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret:
@@ -114,13 +118,19 @@ def main(source_video):
 
         process_frame(model, frame, working_area, time_in_area, entry_time, frame_cnt, frame_duration)
 
-        # cv2.imshow('Frame', frame)
+        # Write the processed frame to the output video
+        out.write(frame)
+
+        # Display the frame
+        cv2.imshow('Frame', frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
+    # Release resources
     cap.release()
+    out.release()  # Release the VideoWriter
     cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
-    main(source_video= "input_video/work-desk.mp4")
+    main(source_video="input_video/work-desk.mp4")
