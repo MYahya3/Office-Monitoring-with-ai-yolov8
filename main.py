@@ -9,7 +9,7 @@ def setup_device():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     return device
-    
+
 def load_yolo_model(device):
     """Load the YOLO model and configure it."""
     model = YOLO("yolov8n.pt")
@@ -18,94 +18,98 @@ def load_yolo_model(device):
     print(f"Model classes: {model.names}")
     return model
 
-source_video = "/home/yahya/Downloads/work-desk.mp4"
-cap = cv2.VideoCapture(source_video)
+def initialize_variables(num_areas):
+    """Initialize time tracking variables."""
+    time_in_area = {index: 0 for index in range(num_areas)}
+    entry_time = {}
+    return time_in_area, entry_time
 
-
-# Define working areas (To draw polygons coords)
-working_area = [
-    [(499, 41), (384, 74), (377, 136), (414, 193), (417, 112), (548, 91)],  # Area 0
-    [(547, 91), (419, 113), (414, 189), (452, 289), (453, 223), (615, 164)],  # Area 1
-    [(158, 84), (294, 85), (299, 157), (151, 137)],  # Area 2
-    [(151, 139), (300, 155), (321, 251), (143, 225)],  # Area 3
-    [(143, 225), (327, 248), (351, 398), (142, 363)],  # Area 4
-    [(618, 166), (457, 225), (454, 289), (522, 396), (557, 331), (698, 262)]   # Area 5
-]
-
-# Initialize variables
-time_in_area = {index: 0 for index in range(len(working_area))}  # Time tracker for each area
-frame_duration = 0.1  # Duration of each frame in seconds
-entry_time = {}  # Track entry time for each detected object
-frame_cnt = 0
-
-while True:
-    ret, frame = cap.read()
-    if not ret:
-        break
-    frame_cnt += 1
-
-    # Get YOLO detections
+def process_frame(model, frame, working_area, time_in_area, entry_time, frame_cnt, frame_duration):
+    """Process a single frame to detect objects and track time spent in each area."""
     boxes, classes, names, confidences, ids = YOLO_Detection(model, frame, conf=0.05, mode="track")
-    polygon_detections = [False] * len(working_area)  # Track detections in each polygon
+    polygon_detections = [False] * len(working_area)
 
     for box, cls, id in zip(boxes, classes, ids):
-        x1, y1, x2, y2 = box
-        center_x = (x1 + x2) / 2
-        center_y = (y1 + y2) / 2
-        center_point = (int(center_x), int(center_y))
+        center_point = calculate_center(box)
+        label_detection(frame=frame, text=f"{names[int(cls)]}, {int(id)}", tbox_color=(255, 144, 30), left=box[0], top=box[1], bottom=box[2], right=box[3])
 
-        # Label the detection
-        label_detection(frame=frame, text=f"{names[int(cls)]}, {int(id)}", tbox_color=(255, 144, 30), left=x1, top=y1, bottom=x2, right=y2)
-
-        # Check if the detection point is inside any working polygon
         for index, pos in enumerate(working_area):
-            matching_result = cv2.pointPolygonTest(np.array(pos, dtype=np.int32), center_point, False)
-            if matching_result >= 0:
-                polygon_detections[index] = True  # Mark this polygon as having a detection
+            if cv2.pointPolygonTest(np.array(pos, dtype=np.int32), center_point, False) >= 0:
+                polygon_detections[index] = True
+                track_time(id, index, frame_cnt, entry_time, time_in_area, frame_duration)
 
-                # Track entry time for the detected worker
-                if id not in entry_time:
-                    # First detection of this ID
-                    entry_time[id] = (frame_cnt, index)  # Store the frame count and area index
-                else:
-                    start_frame, area_index = entry_time[id]
-                    if area_index != index:  # Object has entered a different area
-                        # Add time spent in the previous area
-                        time_in_area[area_index] += frame_duration
-                        print(f"Object ID {id} left Area {area_index + 1}. Time counted: {time_in_area[area_index]:.2f}s")
-                        # Update to the new area
-                        entry_time[id] = (frame_cnt, index)  # Update entry time to new area
-                    else:
-                        # Still in the same area
-                        time_in_area[area_index] += frame_duration  # Increment time in seconds
-                        # Debug statement to verify time counting in Area 6
-                        if area_index == 5:  # Area 6 corresponds to index 5
-                            print(f"Object ID {id} is in Area 6. Time counted: {time_in_area[area_index]:.2f}s")
+    draw_polygons(frame, working_area, polygon_detections)
+    display_time_overlay(frame, time_in_area)
 
-    # Draw polygons based on detection status
-    for index, pos in enumerate(working_area):
-        if not polygon_detections[index]:  # No detection in this polygon
-            draw_working_areas(frame=frame, area=pos, index=index, color=(0, 0, 255))  # Draw in red
+def calculate_center(box):
+    """Calculate the center of a bounding box."""
+    x1, y1, x2, y2 = box
+    center_x = (x1 + x2) / 2
+    center_y = (y1 + y2) / 2
+    return int(center_x), int(center_y)
+
+def track_time(id, index, frame_cnt, entry_time, time_in_area, frame_duration):
+    """Track time spent by each object in each working area."""
+    if id not in entry_time:
+        entry_time[id] = (frame_cnt, index)
+    else:
+        start_frame, area_index = entry_time[id]
+        if area_index != index:
+            time_in_area[area_index] += frame_duration
+            print(f"Object ID {id} left Area {area_index + 1}. Time counted: {time_in_area[area_index]:.2f}s")
+            entry_time[id] = (frame_cnt, index)
         else:
-            draw_working_areas(frame=frame, area=pos, index=index)  # Draw in green
+            time_in_area[area_index] += frame_duration
+            if area_index == 5:
+                print(f"Object ID {id} is in Area 6. Time counted: {time_in_area[area_index]:.2f}s")
 
-    # Draw the transparent box for time spent in each area
+def draw_polygons(frame, working_area, polygon_detections):
+    """Draw working areas with specific color coding based on detections."""
+    for index, pos in enumerate(working_area):
+        color = (0, 255, 0) if polygon_detections[index] else (0, 0, 255)
+        draw_working_areas(frame=frame, area=pos, index=index, color=color)
+
+def display_time_overlay(frame, time_in_area):
+    """Overlay time spent in each area on the frame."""
     overlay = frame.copy()
-    cv2.rectangle(overlay, (10, 10), (250, 250), (255, 255, 255), -1)  # White background
-    cv2.addWeighted(overlay, 0.3, frame, 0.7, 0)  # Make it transparent
-
-    # Display time spent in each area
-    for index in range(len(working_area)):
-        time_spent = time_in_area[index]
+    cv2.rectangle(overlay, (10, 10), (250, 250), (255, 255, 255), -1)
+    cv2.addWeighted(overlay, 0.3, frame, 0.7, 0)
+    
+    for index, time_spent in time_in_area.items():
         cv2.putText(frame, f"Cabin {index + 1}: {round(time_spent)}s", (15, 30 + index * 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1, cv2.LINE_AA)
-    # Show the frame with overlays
-    cv2.imshow('Frame', frame)
 
-    # Exit on pressing 'q'
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
+def main():
+    device = setup_device()
+    model = load_yolo_model(device)
+    working_area = [
+        [(499, 41), (384, 74), (377, 136), (414, 193), (417, 112), (548, 91)], 
+        [(547, 91), (419, 113), (414, 189), (452, 289), (453, 223), (615, 164)],  
+        [(158, 84), (294, 85), (299, 157), (151, 137)],  
+        [(151, 139), (300, 155), (321, 251), (143, 225)],  
+        [(143, 225), (327, 248), (351, 398), (142, 363)],  
+        [(618, 166), (457, 225), (454, 289), (522, 396), (557, 331), (698, 262)]  
+    ]
+    time_in_area, entry_time = initialize_variables(len(working_area))
+    frame_duration = 0.1
 
-# Cleanup code if necessary
-cap.release()
-cv2.destroyAllWindows()
+    cap = cv2.VideoCapture("/home/yahya/Downloads/work-desk.mp4")
+    frame_cnt = 0
+
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame_cnt += 1
+
+        process_frame(model, frame, working_area, time_in_area, entry_time, frame_cnt, frame_duration)
+
+        cv2.imshow('Frame', frame)
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+if __name__ == "__main__":
+    main()
