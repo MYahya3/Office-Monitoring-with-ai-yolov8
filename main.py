@@ -79,7 +79,7 @@ def display_time_overlay(frame, time_in_area):
         cv2.putText(frame, f"Cabin {index + 1}: {round(time_spent)}s", (15, 30 + index * 30),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 0), 1, cv2.LINE_AA)
 
-def main():
+def main(source_video):
     device = setup_device()
     model = load_yolo_model(device)
     working_area = [
@@ -93,7 +93,7 @@ def main():
     time_in_area, entry_time = initialize_variables(len(working_area))
     frame_duration = 0.1
 
-    cap = cv2.VideoCapture("/home/yahya/Downloads/work-desk.mp4")
+    cap = cv2.VideoCapture(source_video)
     frame_cnt = 0
 
     while cap.isOpened():
@@ -112,4 +112,4 @@ def main():
     cv2.destroyAllWindows()
 
 if __name__ == "__main__":
-    main()
+    main(source_video = work-desk.mp4)
